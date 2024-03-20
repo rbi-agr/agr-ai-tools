@@ -9,7 +9,6 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [timescaledb, vector]
 }
 
 model speech_to_text {
