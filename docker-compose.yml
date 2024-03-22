@@ -29,7 +29,7 @@ services:
       timescaledb:
         condition: service_healthy
     environment:
-      DATABASE_URL: 'postgres://timescaledb:postgrespassword@timescaledb:5432/postgres?sslmode=disable&connect_timeout=100'
+      DATABASE_URL: ${DATABASE_URL}
     networks:
       - app-network
 

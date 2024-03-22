@@ -7,6 +7,7 @@ COPY package.json yarn.lock ./
 RUN yarn
 
 COPY . .
+COPY sample.env ./.env
 
 RUN yarn build
 
