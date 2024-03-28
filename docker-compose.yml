@@ -2,12 +2,38 @@ version: '3.6'
 services:
   timescaledb:
     container_name: timescaledb
-    image: samagragovernance/postgres:latest-pg15
+    image: postgres:15
     restart: always
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - ./pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: timescaledb
       POSTGRES_PASSWORD: postgrespassword
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timescaledb -d postgres"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    networks:
+      - app-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '9000:3000'
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge
