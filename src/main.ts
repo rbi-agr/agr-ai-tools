@@ -66,7 +66,7 @@ async function bootstrap() {
   await app.register(multipart);
   await app.register(compression, { encodings: ["gzip", "deflate"] });
   app.useStaticAssets({ root: join(__dirname, "../../files") });
-  await app.listen(3000, "0.0.0.0");
+  await app.listen(9000, "0.0.0.0");
 }
 
 bootstrap();
