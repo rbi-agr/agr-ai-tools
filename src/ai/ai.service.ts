@@ -409,7 +409,9 @@ export class AiService {
       let postProcessors = true
       // if(body.disablePostProcessor=="true") postProcessors = false
       // const command = `ffmpeg -i '${inputFilePath}' -acodec pcm_s16le '${outputFileName}'`;
+      const asrService = body.provider ? body.provider : "bhasini";
       let downloadURL, response: any, res: any, timeTaken, spellCheckTimeTaken;
+
       try {
         // await exec(command);
         await this.convertCodecAsync(inputFilePath,outputFileName);
@@ -420,8 +422,6 @@ export class AiService {
       }
   
       try {
-  
-        let asrService = "azure"
         //azure
         if (asrService == "azure")
           response = await this.azureASR(filePath, { language });
@@ -443,7 +443,7 @@ export class AiService {
         let spellCheckstartTime = Date.now();
         spellCheckTimeTaken = `${(Date.now() - spellCheckstartTime) / 1000} sec`
         const fileBuffer = await fsPromises.readFile(filePath);
-        console.log("amakrushi-audio", file.filename, file.buffer)
+        console.log("AGR-audio", file.filename, file.buffer)
         let error;
         try {
           await this.minioStorageService.uploadWavFile("amakrushi-audio", file.filename, fileBuffer);
