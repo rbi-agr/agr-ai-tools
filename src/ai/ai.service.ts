@@ -635,56 +635,56 @@ export class AiService {
         }
       }
 
-      async translate(
-        source: Language,
-        target: Language,
-        text: string
-      ): Promise<any> {
-        var myHeaders = new Headers();
-        myHeaders.append("Content-Type", "application/json");
-        myHeaders.append(
-          "Authorization",
-          this.configService.get("AI_TOOLS_AUTH_HEADER")
-        );
+      // async translate(
+      //   source: Language,
+      //   target: Language,
+      //   text: string
+      // ): Promise<any> {
+      //   var myHeaders = new Headers();
+      //   myHeaders.append("Content-Type", "application/json");
+      //   myHeaders.append(
+      //     "Authorization",
+      //     this.configService.get("AI_TOOLS_AUTH_HEADER")
+      //   );
     
-        let textArray = text.replace(/\n\n/g, "\n").split("\n")
-        try {
-          for (let i = 0; i < textArray.length; i++) {
-            var raw = JSON.stringify({
-              source_language: source,
-              target_language: target,
-              text: textArray[i],
-            });
-            var requestOptions: any = {
-              method: "POST",
-              headers: myHeaders,
-              body: raw.replace('"unk\"', '"hi\"'),
-            };
-            let translateURL = 'text_translation/azure_dict/remote/';
-            translateURL = `${this.configService.get("AI_TOOLS_BASE_URL")}/${translateURL}`
+      //   let textArray = text.replace(/\n\n/g, "\n").split("\n")
+      //   try {
+      //     for (let i = 0; i < textArray.length; i++) {
+      //       var raw = JSON.stringify({
+      //         source_language: source,
+      //         target_language: target,
+      //         text: textArray[i],
+      //       });
+      //       var requestOptions: any = {
+      //         method: "POST",
+      //         headers: myHeaders,
+      //         body: raw.replace('"unk\"', '"hi\"'),
+      //       };
+      //       let translateURL = 'text_translation/azure_dict/remote/';
+      //       translateURL = `${this.configService.get("AI_TOOLS_BASE_URL")}/${translateURL}`
     
-            let response = await fetch(
-              translateURL,
-              requestOptions
-            )
-            response = await response.json()
-            if (response["error"]) {
-              console.log(response["error"])
-              throw new Error(response["error"])
-            }
-            textArray[i] = response["translated"] as string ? response["translated"] as string : "";
-          }
-          return {
-            translated: textArray.join('\n'),
-            error: null
-          }
-        } catch (error) {
-          return {
-            translated: "",
-            error: error.message
-          }
-        }
-      }
+      //       let response = await fetch(
+      //         translateURL,
+      //         requestOptions
+      //       )
+      //       response = await response.json()
+      //       if (response["error"]) {
+      //         console.log(response["error"])
+      //         throw new Error(response["error"])
+      //       }
+      //       textArray[i] = response["translated"] as string ? response["translated"] as string : "";
+      //     }
+      //     return {
+      //       translated: textArray.join('\n'),
+      //       error: null
+      //     }
+      //   } catch (error) {
+      //     return {
+      //       translated: "",
+      //       error: error.message
+      //     }
+      //   }
+      // }
 
       async translateBhashini(
         source: Language,
