@@ -61,9 +61,9 @@ export class AiController {
       } else {
         translateService = body.provider
       }
-      if(translateService=="azure")
-      return await this.aiToolsService.translate(body.source,body.target,body.text)
-      else
+      // if(translateService=="azure")
+      // return await this.aiToolsService.translate(body.source,body.target,body.text)
+      // else
       return await this.aiToolsService.translateBhashini(body.source,body.target,body.text)
     }
 
