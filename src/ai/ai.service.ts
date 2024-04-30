@@ -10,82 +10,69 @@ import { isMostlyEnglish } from 'src/utils';
 import { PrismaService } from '../global-services/prisma.service';
 import { unlink } from 'fs/promises';
 import { Cache } from 'cache-manager';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 const FormData = require("form-data");
 
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const sdk = require("microsoft-cognitiveservices-speech-sdk");
 const { v4: uuidv4 } = require('uuid');
+const execPromise = promisify(exec);
 
 let languageType: Language;
 @Injectable()
 export class AiService {
-
-    private minioStorageService: MinioStorageService;
-    constructor(
-      private configService: ConfigService, 
-      private prismaService: PrismaService,
-      @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-    ) {
+      private minioStorageService: MinioStorageService;
+      constructor(
+          private configService: ConfigService,
+          private prismaService: PrismaService,
+          @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+      ) {
         this.minioStorageService = new MinioStorageService(configService);
-    }
+      }
 
-    async detectLanguage(text: string): Promise<any> {
-      var myHeaders = new Headers();
-      myHeaders.append("Content-Type", "application/json");
+      async detectLanguage(text: string): Promise<any> {
+          try {
+              const scriptPath = 'src/ai/scripts/detectLanguage.sh'; // Path to your script file
+              const command = `${scriptPath} "${text?.replace("?", "")?.trim()}" "${this.configService.get("TEXT_LANG_DETECTION_MODEL")}"`; // Command to execute the script with text parameter
+              const parameters = [
+                text?.replace("?", "")?.trim(),
+                this.configService.get("TEXT_LANG_DETECTION_MODEL")
+            ];
+              const { stdout, stderr } = await execPromise(command);
   
-      var body = JSON.stringify({
-        modelId: this.configService.get("TEXT_LANG_DETECTION_MODEL"),
-        task: "txt-lang-detection",
-        input:[{
-          source: text?.replace("?","")?.trim()
-        }],
-        userId: null
-      });
-  
-      var requestOptions = {
-        method: "POST",
-        headers: myHeaders,
-        body
-      };
-  
-      try {
-          // this.monitoringService.incrementBhashiniCount()
-          let response:any = await fetch(
-              'https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/compute',
-              requestOptions
-          )
-          response = await response.json()
-          let language: Language;
-          if(response.output && response.output.length){
-            language = response.output[0]?.langPrediction[0]?.langCode as Language
-            // this.monitoringService.incrementBhashiniSuccessCount()
-            return {
-              language: language || 'unk',
-              error: null
-            }
-          } else {
-            // this.monitoringService.incrementBhashiniFailureCount()
-            return {
-              language: 'unk',
-              error: null
-            }
-          }
-      } catch (error) {
-          // this.monitoringService.incrementBhashiniFailureCount()
-          if(isMostlyEnglish(text?.replace("?","")?.trim())) {
-              return {
-                  language: Language.en,
-                  error: error.message
+              const response = JSON.parse(stdout);
+              console.log('Response from Bhasini:', response)
+
+              if(response.error) {
+                console.log("Error:", response);
+                throw new Error(response.error);
               }
-          } else {
+              
+              let language: Language;
+              if (response.output && response.output.length) {
+                  language = response.output[0]?.langPrediction[0]?.langCode as Language;
+              }
+  
               return {
-                  language: 'unk',
-                  error: error.message
+                  language: language || 'unk',
+                  error: null
+              };
+          } catch (error) {
+              if (isMostlyEnglish(text?.replace("?", "")?.trim())) {
+                  return {
+                      language: Language.en,
+                      error: error.message
+                  };
+              } else {
+                  return {
+                      language: 'unk',
+                      error: error.message
+                  };
               }
           }
       }
-    }
 
     async convertCodecAsync(inputFilePath, outputFileName): Promise<any> {
         return new Promise((resolve, reject) => {
@@ -103,128 +90,6 @@ export class AiService {
             .run();
         });
       }
-
-    async getBhashiniConfig(task, config) {
-    // const cacheKey = `getBhashiniConfig:${JSON.stringify({ task, config })}`;
-
-    // const cachedData = await this.cacheManager.get(cacheKey);
-    // if (cachedData) {
-    //   return cachedData;
-    // }
-        var myHeaders = new Headers();
-        myHeaders.append("userID", this.configService.get("ULCA_USER_ID"));
-        myHeaders.append("ulcaApiKey", this.configService.get("ULCA_API_KEY"));
-        myHeaders.append("Content-Type", "application/json");
-
-        var raw = JSON.stringify({
-            "pipelineTasks": [
-            {
-                "taskType": task,
-                "config": config
-            }
-            ],
-            "pipelineRequestConfig": {
-            "pipelineId": "64392f96daac500b55c543cd"
-            }
-        });
-
-        var requestOptions: any = {
-            method: 'POST',
-            headers: myHeaders,
-            body: raw,
-            redirect: 'follow',
-            retry: 4,
-            pause: 0,
-            callback: retry => {
-            console.log(`Re-Trying: ${retry}`);
-            },
-            timeout: 40000
-        };
-        try {
-            // this.monitoringService.incrementBhashiniCount()
-            console.log(`${new Date()}: Waiting for ${this.configService.get("ULCA_CONFIG_URL")} (config API) to respond ...`)
-            let response = await fetch(this.configService.get("ULCA_CONFIG_URL"), requestOptions)
-            if (response.status != 200) {
-            console.log(response)
-            throw new Error(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
-            }
-            response = await response.json()
-            console.log(`${new Date()}: Responded succesfully`)
-            // this.monitoringService.incrementBhashiniSuccessCount()
-            // await this.cacheManager.set(cacheKey, response, 86400);
-            return response
-        } catch (error) {
-            // this.monitoringService.incrementBhashiniFailureCount()
-            console.log(error);
-            return {
-            error
-            }
-        }
-    } 
-
-    async computeBhashini(authorization, task, serviceId, url, config, input) {
-        // const cacheKey = `computeBhashini:${JSON.stringify({ task, serviceId, url, config, input })}`;
-        // if(task != 'asr'){
-        //   const cachedData = await this.cacheManager.get(cacheKey);
-        //   if (cachedData) {
-        //     return cachedData;
-        //   }
-        // }
-        var myHeaders = new Headers();
-        myHeaders.append("Accept", " */*");
-        myHeaders.append("Authorization", authorization);
-        myHeaders.append("Content-Type", "application/json");
-        config['serviceId'] = serviceId
-        if (task == 'tts') {
-            config['gender'] = 'male'
-            config['samplingRate'] = 8000
-        }
-        var raw = JSON.stringify({
-            "pipelineTasks": [
-            {
-                "taskType": task,
-                "config": config
-            }
-            ],
-            "inputData": input
-        });
-
-        var requestOptions: any = {
-            method: 'POST',
-            headers: myHeaders,
-            body: raw,
-            redirect: 'follow',
-            retry: 4,
-            pause: 0,
-            callback: retry => {
-            console.log(`Re-Trying: ${retry}`);
-            },
-            timeout: 40000
-        };
-
-        try {
-            // this.monitoringService.incrementBhashiniCount()
-            console.log(`${new Date()}: Waiting for ${url} for task (${task}) to respond ...`)
-            let response = await fetch(url, requestOptions)
-            if (response.status != 200) {
-            console.log(response)
-            throw new Error(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
-            }
-            response = await response.json()
-            console.log(`${new Date()}: Responded succesfully.`)
-            // this.monitoringService.incrementBhashiniSuccessCount()
-            // if(task != 'asr') {
-            //   await this.cacheManager.set(cacheKey, response, 7200);
-            // }
-            return response
-        } catch (error) {
-            // this.monitoringService.incrementBhashiniFailureCount()
-            console.log(error);
-            return {
-            error
-            }
-        }
-    }
 
       async speechToText(
         base64audio: string,
@@ -311,104 +176,12 @@ export class AiService {
         });
     }
 
-    // async asr(file: Express.Multer.File, language: string): Promise<any> {
-    //   console.log("Started asr...")
-    //     let startTime = Date.now();
-    //     let inputFilePath = path.join(__dirname, `../../../${file.path}`);
-    //     const outputFileName = `./files/${file.filename}_modified.wav`;
-    //     let filePath = path.join(__dirname, `../../../${outputFileName}`);
-    //     let postProcessors = true
-    //     // if(body.disablePostProcessor=="true") postProcessors = false
-    //     // const command = `ffmpeg -i '${inputFilePath}' -acodec pcm_s16le '${outputFileName}'`;
-    //     let downloadURL, response: any, res: any, timeTaken, spellCheckTimeTaken;
-    //     try {
-    //       // await exec(command);
-    //       await this.convertCodecAsync(inputFilePath,outputFileName);
-    //       console.log(`File '${inputFilePath}' converted to '${outputFileName}' successfully.`);
-    //     } catch (error) {
-    //       filePath = inputFilePath
-    //       console.log(error)
-    //     }
-    
-    //     try {
-    //       let asrService = "azure"
-    //       //azure
-    //       if (asrService == "azure")
-    //         response = await this.azureASR(filePath, { language });
-    //       else {
-    //         // bhashini
-    //         var formdata = new FormData();
-    //         formdata.append('file', fs.createReadStream(filePath));
-    //         let base64String = await convertWavToBase64Async(filePath);
-    //         if (language.toLowerCase() === 'en') {
-    //           languageType = Language.en;
-    //         } else {
-    //           languageType = Language.hi;
-    //         }
-    //         response = await this.speechToText(base64String, languageType, postProcessors);
-    //         response = await response.text
-    //       }
-    
-    //       timeTaken = `${(Date.now() - startTime) / 1000} sec`;
-    //       let spellCheckstartTime = Date.now();
-    //       spellCheckTimeTaken = `${(Date.now() - spellCheckstartTime) / 1000} sec`
-    //       const fileBuffer = await fsPromises.readFile(filePath);
-    //       console.log("amakrushi-audio", file.filename, file.buffer)
-    //       let error;
-    //       try {
-    //         await this.minioStorageService.uploadWavFile("amakrushi-audio", file.filename, fileBuffer);
-    //         downloadURL = await this.minioStorageService.getDownloadURL("amakrushi-audio", file.filename)
-    //       } catch (err) {
-    //         console.log(err)
-    //         error = err
-    //         downloadURL = "Error occured while uploading this audio."
-    //       }
-    //       if (!error && response == "ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ") error = `AI Tools responeded with "ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ"`
-    //       let asr = await this.prismaService.speech_to_text.create({
-    //         data: {
-    //           audio: downloadURL,
-    //           text: response,
-    //           spell_corrected_text: response,
-    //           timeTaken,
-    //           spellCheckTimeTaken,
-    //           error: `${error}`,
-    //           phoneNumber: ""
-    //         }
-    //       })
-    //       try {
-    //         await unlink(filePath)
-    //         await unlink(inputFilePath)
-    //       } catch (error) {
-    //         console.log(error)
-    //       }
-    //       return {
-    //         id: asr.id,
-    //         text: asr.text
-    //       }
-    //     } catch (err) {
-    //       console.log('error', err)
-    //       await this.prismaService.speech_to_text.create({
-    //         data: {
-    //           audio: downloadURL ? downloadURL : "Error occured while uploading this audio.",
-    //           text: response ? response : "Error occured while uploading this audio.",
-    //           spell_corrected_text: response ? response : "Error occured while uploading this audio.",
-    //           timeTaken,
-    //           spellCheckTimeTaken,
-    //           error: `${err}`,
-    //           phoneNumber: ""
-    //         }
-    //       })
-    //     }
-    //   }
-
     async asr(file: Express.Multer.File, body: any, language: string): Promise<any> {
       let startTime = Date.now();
       let inputFilePath = path.join(__dirname, `../../${file.path}`);
       const outputFileName = `./files/${file.filename}_modified.wav`;
       let filePath = path.join(__dirname, `../../${outputFileName}`);
       let postProcessors = true
-      // if(body.disablePostProcessor=="true") postProcessors = false
-      // const command = `ffmpeg -i '${inputFilePath}' -acodec pcm_s16le '${outputFileName}'`;
       const asrService = body.provider ? body.provider : "bhasini";
       let downloadURL, response: any, res: any, timeTaken, spellCheckTimeTaken;
 
@@ -510,10 +283,10 @@ export class AiService {
           let task = 'tts'
           let cacheKey = `getBhashiniConfig:${JSON.stringify({ task, config })}`;
           let cachedData = await this.cacheManager.get(cacheKey);
-          var myHeaders = new Headers();
-          myHeaders.append("userID", this.configService.get("ULCA_USER_ID"));
-          myHeaders.append("ulcaApiKey", this.configService.get("ULCA_API_KEY"));
-          myHeaders.append("Content-Type", "application/json");
+          // var myHeaders = new Headers();
+          // myHeaders.append("userID", this.configService.get("ULCA_USER_ID"));
+          // myHeaders.append("ulcaApiKey", this.configService.get("ULCA_API_KEY"));
+          // myHeaders.append("Content-Type", "application/json");
           let configResponse;
           if (cachedData) {
             configResponse = cachedData;
@@ -529,26 +302,15 @@ export class AiService {
                 "pipelineId": "64392f96daac500b55c543cd"
               }
             });
-            var requestOptions: any = {
-              method: 'POST',
-              headers: myHeaders,
-              body: raw,
-              redirect: 'follow',
-              retry: 4,
-              pause: 0,
-              callback: retry => {
-                console.log(`Re-Trying: ${retry}`);
-              },
-              timeout: 40000
-            };
+
             console.log(this.configService.get("ULCA_CONFIG_URL"))
-            let response: any = await fetch(this.configService.get("ULCA_CONFIG_URL"), requestOptions)
-            if (response.status != 200) {
+            let response = await this.getBhashiniConfig(task, config);
+
+            if (response.status) {
               console.log(response)
               throw new Error(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             }
-            response = await response.json()
-            console.log(response);
+            // console.log(response);
             await this.cacheManager.set(cacheKey, response, 86400);
             configResponse = response
           }
@@ -565,52 +327,83 @@ export class AiService {
                 error: null
               }
             } else {
-              myHeaders.append("Authorization", authorization);
               config['serviceId'] = serviceId
               config['gender'] = 'male'
               config['samplingRate'] = 8000
-              raw = JSON.stringify({
+
+              let raw = {
                 "pipelineTasks": [
                   {
                     "taskType": task,
                     "config": config
                   }
                 ],
-                "inputData": {
+                "input": [
+                  {
+                    "source": text
+                  }
+                ]
+              }
+
+              let responseBhasini = await this.computeBhashini(
+                authorization,
+                task,
+                serviceId,
+                url,
+                config,
+                {
                   "input": [
                     {
                       "source": text
                     }
                   ]
                 }
-              });
-              let requestOptions: any = {
-                method: 'POST',
-                headers: myHeaders,
-                body: raw,
-                redirect: 'follow',
-                retry: 4,
-                pause: 0,
-                callback: retry => {
-                  console.log(`Re-Trying: ${retry}`);
-                },
-                timeout: 40000
-              };
+              )
+              // myHeaders.append("Authorization", authorization);
+              // config['serviceId'] = serviceId
+              // config['gender'] = 'male'
+              // config['samplingRate'] = 8000
+              // raw = JSON.stringify({
+              //   "pipelineTasks": [
+              //     {
+              //       "taskType": task,
+              //       "config": config
+              //     }
+              //   ],
+              //   "input": [
+              //     {
+              //       "source": text
+              //     }
+              //   ]
+              // });
+              // let requestOptions: any = {
+              //   method: 'POST',
+              //   headers: myHeaders,
+              //   body: raw,
+              //   redirect: 'follow',
+              //   retry: 4,
+              //   pause: 0,
+              //   callback: retry => {
+              //     console.log(`Re-Trying: ${retry}`);
+              //   },
+              //   timeout: 40000
+              // };
               console.log(url)
-              let response: any = await fetch(url, requestOptions)
-              console.log("Hereeee ", response)
-              if (response.status != 200) {
-                console.log(response)
-                throw new Error(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
+              // let response: any = await fetch(url, requestOptions)
+              
+              // console.log("Hereeee ", responseBhasini)
+              if (responseBhasini.status) {
+                console.log(responseBhasini)
+                throw new Error(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${responseBhasini.status}`)
               }
-              response = await response.json();
-              if (response["error"]) {
-                console.log(response["error"])
-                throw new Error(response["error"])
+
+              if (responseBhasini["error"]) {
+                console.log(responseBhasini["error"])
+                throw new Error(responseBhasini["error"])
               }
-              await this.cacheManager.set(cacheKey, response, 7200);
+              await this.cacheManager.set(cacheKey, responseBhasini, 7200);
               finalResponse = {
-                text: response?.pipelineResponse[0]?.audio[0]?.audioContent,
+                text: responseBhasini?.pipelineResponse[0]?.audio[0]?.audioContent,
                 error: null
               }
               console.log("Final Response: ", finalResponse)
@@ -621,7 +414,7 @@ export class AiService {
           if (finalResponse && finalResponse.text) {
             const binaryData = Buffer.from(finalResponse.text, 'base64');
             const uuid = uuidv4();
-            await this.minioStorageService.uploadWavFile("amakrushi-audio", `${uuid}.wav`, binaryData);
+            let up = await this.minioStorageService.uploadWavFile("amakrushi-audio", `${uuid}.wav`, binaryData);
             console.log("Uploaded the audio file...")
             return await this.minioStorageService.getDownloadURL("amakrushi-audio", `${uuid}.wav`)
           } else {
@@ -635,104 +428,119 @@ export class AiService {
         }
       }
 
-      // async translate(
-      //   source: Language,
-      //   target: Language,
-      //   text: string
-      // ): Promise<any> {
-      //   var myHeaders = new Headers();
-      //   myHeaders.append("Content-Type", "application/json");
-      //   myHeaders.append(
-      //     "Authorization",
-      //     this.configService.get("AI_TOOLS_AUTH_HEADER")
-      //   );
-    
-      //   let textArray = text.replace(/\n\n/g, "\n").split("\n")
-      //   try {
-      //     for (let i = 0; i < textArray.length; i++) {
-      //       var raw = JSON.stringify({
-      //         source_language: source,
-      //         target_language: target,
-      //         text: textArray[i],
-      //       });
-      //       var requestOptions: any = {
-      //         method: "POST",
-      //         headers: myHeaders,
-      //         body: raw.replace('"unk\"', '"hi\"'),
-      //       };
-      //       let translateURL = 'text_translation/azure_dict/remote/';
-      //       translateURL = `${this.configService.get("AI_TOOLS_BASE_URL")}/${translateURL}`
-    
-      //       let response = await fetch(
-      //         translateURL,
-      //         requestOptions
-      //       )
-      //       response = await response.json()
-      //       if (response["error"]) {
-      //         console.log(response["error"])
-      //         throw new Error(response["error"])
-      //       }
-      //       textArray[i] = response["translated"] as string ? response["translated"] as string : "";
-      //     }
-      //     return {
-      //       translated: textArray.join('\n'),
-      //       error: null
-      //     }
-      //   } catch (error) {
-      //     return {
-      //       translated: "",
-      //       error: error.message
-      //     }
-      //   }
-      // }
-
       async translateBhashini(
         source: Language,
         target: Language,
         text: string
-      ) {
+    ): Promise<any> {
         try {
           let config = {
             "language": {
-              "sourceLanguage": source,
-              "targetLanguage": target
-            }
-          }
-          let bhashiniConfig: any = await this.getBhashiniConfig('translation', config)
-    
-          let textArray = text.replace(/\n\n/g, "\n").split("\n")
-          for (let i = 0; i < textArray.length; i++) {
-            let response: any = await this.computeBhashini(
-              bhashiniConfig?.pipelineInferenceAPIEndPoint?.inferenceApiKey?.value,
-              "translation",
-              bhashiniConfig?.pipelineResponseConfig[0].config[0].serviceId,
-              bhashiniConfig?.pipelineInferenceAPIEndPoint?.callbackUrl,
-              config,
-              {
-                "input": [
-                  {
-                    "source": textArray[i]
-                  }
-                ]
-              }
-            )
-            if (response["error"]) {
-              console.log(response["error"])
-              throw new Error(response["error"])
-            }
-            textArray[i] = response?.pipelineResponse[0]?.output[0]?.target
-          }
-          return {
-            translated: textArray.join('\n'),
-            error: null
-          }
-        } catch (error) {
-          console.log(error)
-          return {
-            translated: "",
-            error: error
+            "sourceLanguage": source,
+            "targetLanguage": target
           }
         }
-      }
+        const bhashiniConfig = await this.getBhashiniConfig('translation', config);
 
+        let textArray = text.replace(/\n\n/g, "\n").split("\n")
+
+        for (let i = 0; i < textArray.length; i++) {
+          let response = await this.computeBhashini(
+            bhashiniConfig?.pipelineInferenceAPIEndPoint?.inferenceApiKey?.value,
+            'translation',
+            bhashiniConfig?.pipelineResponseConfig[0].config[0].serviceId,
+            bhashiniConfig?.pipelineInferenceAPIEndPoint?.callbackUrl,
+            config,
+            {
+              "input": [
+                {
+                  "source": textArray[i]
+                }
+              ]
+            }
+          )
+
+          console.log('Response from computeBhashiniConfig:', response?.pipelineResponse[0])
+
+          if(response.error) {
+            console.log("Error:", response.error);
+            throw new Error(response.error);
+          }
+
+          textArray[i] = response?.pipelineResponse[0]?.output[0]?.target
+        }
+        console.log("Response:", textArray.join('\n'));
+        return {
+          translated: textArray.join('\n'),
+          error: null
+        }
+      } catch (error) {
+        console.error(error);
+        return {
+          translated: "",
+          error: error
+        };
+      }
+    }
+
+  async getBhashiniConfig(task, config) {
+    const userID = this.configService.get("ULCA_USER_ID");
+    const ulcaApiKey = this.configService.get("ULCA_API_KEY");
+    const apiURL = this.configService.get("ULCA_CONFIG_URL");
+
+    const scriptPath = 'src/ai/scripts/getBhashiniConfig.sh';
+
+    console.log(`${new Date()}: Waiting for ${apiURL} (config API) to respond ...`);
+
+    try {
+        const command = `${scriptPath} ${userID} ${ulcaApiKey} ${apiURL} ${task} '${JSON.stringify(config)}'`;
+        const { stdout, stderr } = await execPromise(command);
+
+        const response = JSON.parse(stdout);
+        console.log('Response from getBhasiniConfig:', response)
+
+        if(response.message) {
+          console.log("Error:", response);
+          throw new Error(response.message);
+        }
+
+        console.log(`${new Date()}: Responded successfully`);
+        return response;
+    } catch (error) {
+        console.error(`${new Date()}: Error executing script: ${error}`);
+        return { error };
+    }
 }
+
+  async computeBhashini(authorization, task, serviceId, url, config, input) {
+    try {
+        const scriptPath = 'src/ai/scripts/computeBhashini.sh';
+
+        const configStr = JSON.stringify(config).replace(/"/g, '\\"');
+        const inputDataStr = JSON.stringify(input).replace(/"/g, '\\"');
+        const command = `${scriptPath} "${authorization}" "${task}" "${serviceId}" "${url}" "${configStr}" "${inputDataStr}"`;
+
+        const { stdout, stderr } = await execPromise(command);
+        const response = JSON.parse(stdout);
+
+        if(response.error) {
+          console.log("Error:", response.error);
+          throw new Error(response.error);
+        }
+
+        return response;
+      } catch (error) {
+        console.error(`Error in computeBhashini function: ${error.message}`);
+        throw new Error(error.message);
+      }
+    }
+  }
+
+
+
+
+
+
+
+
+            

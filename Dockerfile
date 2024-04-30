@@ -2,6 +2,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+RUN apk --no-cache --no-check-certificate add curl
+
 COPY package.json yarn.lock ./
 
 RUN yarn
