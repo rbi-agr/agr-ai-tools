@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node"
 export default async function fetch(url, opts) {
     let retry = opts && opts.retry || 3
 
@@ -13,6 +14,7 @@ export default async function fetch(url, opts) {
             if(opts && opts.timeout) clearTimeout(id)
             return res
         } catch(e) {
+            Sentry.captureException("Fetch Error: Node-fetch Error")
             if(opts && opts.timeout) clearTimeout(id)
             if (opts && opts.callback) {
                 opts.callback(retry)

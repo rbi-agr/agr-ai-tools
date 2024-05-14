@@ -1,5 +1,6 @@
 // import { AI_TOOLS_DELAY_ALERT, AI_TOOLS_ERROR } from "./constants";
 import fetch from "node-fetch";
+import * as Sentry from '@sentry/node'
 const fs = require('fs');
 
 export const fetchWithAlert = async (
@@ -11,6 +12,7 @@ export const fetchWithAlert = async (
         const start = Date.now();
         const response = await fetch(url, options);
         if(response.status && !response.ok){
+            Sentry.captureException(`Fetch With Alert Error: Network response was not ok. status ${response.status}`)
             throw new Error(`Network response was not ok. status ${response.status}`);
         }
         const end = Date.now();
@@ -37,6 +39,7 @@ export const fetchWithAlert = async (
         // }
         return response;
     } catch(error){
+        Sentry.captureException("Fetch With Alert Error")
         // sendEmail(
         //     JSON.parse(process.env.SENDGRID_ALERT_RECEIVERS),
         //     "Ai-tools request failure",
@@ -73,6 +76,7 @@ export const convertWavToBase64Async = (wavFilePath): Promise<string> => {
     return new Promise((resolve, reject) => {
       fs.readFile(wavFilePath, (err, data) => {
         if (err) {
+          Sentry.captureException("Audio Conversion Utility Error: WAV to Base64 Conversion Error")
           reject(err);
         } else {
           const base64String = data.toString('base64');

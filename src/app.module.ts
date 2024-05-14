@@ -9,6 +9,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
 import { AiService } from './ai/ai.service';
 import { MinioStorageService } from './mino/mino.service';
 import { PrometheusModule } from "@willsoto/nestjs-prometheus";
+import {LoggerService} from './logger/logger.service'
 
 
 @Module({
@@ -31,6 +32,6 @@ import { PrometheusModule } from "@willsoto/nestjs-prometheus";
     ConfigService,
     AiService,
     MinioStorageService,
-  ],
+    LoggerService],
 })
 export class AppModule {}

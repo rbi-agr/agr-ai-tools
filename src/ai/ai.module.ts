@@ -4,6 +4,7 @@ import { AiService } from './ai.service';
 import { MinioStorageService } from 'src/mino/mino.service';
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from 'src/global-services/prisma.service';
+import { LoggerService } from '../logger/logger.service'
 
 @Module({
   imports: [CacheModule.register()],
@@ -13,6 +14,7 @@ import { PrismaService } from 'src/global-services/prisma.service';
     PrismaService,
     AiService,
     MinioStorageService,
+    LoggerService
   ]
 })
 export class AiModule {}
