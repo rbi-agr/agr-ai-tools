@@ -10,6 +10,8 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import compression from "@fastify/compress";
 import { join } from "path";
+import {SentryConfig} from "./common/sentry"
+import * as Sentry from "@sentry/node"
 // import { CustomLogger } from "./common/logger";
 import { MonitoringService } from "./monitoring/monitoring.service";
 
@@ -67,6 +69,7 @@ async function bootstrap() {
   await app.register(compression, { encodings: ["gzip", "deflate"] });
   app.useStaticAssets({ root: join(__dirname, "../../files") });
   await app.listen(9000, "0.0.0.0");
+  Sentry.init(SentryConfig)
 }
 
 bootstrap();

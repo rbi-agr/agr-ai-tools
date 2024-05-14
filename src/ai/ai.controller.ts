@@ -8,6 +8,7 @@ import { DetectLang, T2S } from "./ai.dto"
 import { AiService } from "./ai.service";
 import { PrismaService } from "src/global-services/prisma.service";
 import { Cache } from 'cache-manager';
+import {LoggerService} from '../logger/logger.service'
 
 const editFileName = (req: ExpressRequest, file: Express.Multer.File, callback) => {
   const name = file.originalname.split('.')[0];
@@ -39,9 +40,10 @@ export class AiController {
       private configService: ConfigService, 
       private aiToolsService: AiService, 
       private prismaService: PrismaService,
+      private readonly logger : LoggerService,
       @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {
-        this.aiToolsService = new AiService(configService, prismaService, cacheManager)
+        this.aiToolsService = new AiService(configService, prismaService, logger, cacheManager)
     }
     @Post('t2s')
     async t2s(@Body() body: T2S){

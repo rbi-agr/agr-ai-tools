@@ -2,10 +2,11 @@
 import { Module, OnModuleInit, Global, DynamicModule } from '@nestjs/common';
 import { MonitoringService } from './monitoring.service';
 import { PrismaService } from 'src/global-services/prisma.service';
+import {LoggerService} from '../logger/logger.service'
 
 @Global()
 @Module({
-  providers: [MonitoringService,PrismaService],
+  providers: [MonitoringService,PrismaService,LoggerService],
   exports: [MonitoringService],
 })
 export class MonitoringModule implements OnModuleInit {

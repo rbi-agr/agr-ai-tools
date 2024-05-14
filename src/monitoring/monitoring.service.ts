@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Counter } from 'prom-client';
 import { PrismaService } from '../global-services/prisma.service';
+import * as Sentry from '@sentry/node'
+import {LoggerService} from "../logger/logger.service"
 
 @Injectable()
 export class MonitoringService {
-  constructor(private prismaService: PrismaService){}
+  constructor(private prismaService: PrismaService, private readonly logger: LoggerService){}
 
   async initializeAsync(){
     const metricsToUpsert: any = [
@@ -253,7 +255,8 @@ export class MonitoringService {
         }
       }
     } catch(err){
-      console.log(err)
+      Sentry.captureException("Monitoring Service Error:")
+      this.logger.error("Monitoring Service Error:",err)
     }
   }
 

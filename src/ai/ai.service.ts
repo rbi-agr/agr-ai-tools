@@ -10,6 +10,8 @@ import { isMostlyEnglish } from 'src/utils';
 import { PrismaService } from '../global-services/prisma.service';
 import { unlink } from 'fs/promises';
 import { Cache } from 'cache-manager';
+import {LoggerService} from "../logger/logger.service"
+import * as Sentry from "@sentry/node"
 const FormData = require("form-data");
 
 const path = require('path');
@@ -25,6 +27,7 @@ export class AiService {
     constructor(
       private configService: ConfigService, 
       private prismaService: PrismaService,
+      private readonly logger: LoggerService,
       @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {
         this.minioStorageService = new MinioStorageService(configService);
@@ -72,6 +75,8 @@ export class AiService {
             }
           }
       } catch (error) {
+          Sentry.captureException("AI Service Error: Language detection Error")
+          this.logger.error("AI Service Error: Language detection Error", error)
           // this.monitoringService.incrementBhashiniFailureCount()
           if(isMostlyEnglish(text?.replace("?","")?.trim())) {
               return {
@@ -97,7 +102,8 @@ export class AiService {
               resolve('Conversion finished');
             })
             .on('error', (err) => {
-              console.error('Error:', err);
+              Sentry.captureException("AI Service Error: Audio Conversion Error")
+              this.logger.error('AI Service Error: Audio Conversion Error', err);
               reject(err);
             })
             .run();
@@ -142,20 +148,21 @@ export class AiService {
         };
         try {
             // this.monitoringService.incrementBhashiniCount()
-            console.log(`${new Date()}: Waiting for ${this.configService.get("ULCA_CONFIG_URL")} (config API) to respond ...`)
+            this.logger.info(`${new Date()}: Waiting for ${this.configService.get("ULCA_CONFIG_URL")} (config API) to respond ...`)
             let response = await fetch(this.configService.get("ULCA_CONFIG_URL"), requestOptions)
             if (response.status != 200) {
-            console.log(response)
+            this.logger.info(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             throw new Error(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             }
             response = await response.json()
-            console.log(`${new Date()}: Responded succesfully`)
+            this.logger.info(`${new Date()}: Responded succesfully`)
             // this.monitoringService.incrementBhashiniSuccessCount()
             // await this.cacheManager.set(cacheKey, response, 86400);
             return response
         } catch (error) {
             // this.monitoringService.incrementBhashiniFailureCount()
-            console.log(error);
+            Sentry.captureException("AI Service Error: Get Config Error")
+            this.logger.error("AI Service Error: Get Config Error",error);
             return {
             error
             }
@@ -204,14 +211,14 @@ export class AiService {
 
         try {
             // this.monitoringService.incrementBhashiniCount()
-            console.log(`${new Date()}: Waiting for ${url} for task (${task}) to respond ...`)
+            this.logger.info(`${new Date()}: Waiting for ${url} for task (${task}) to respond ...`)
             let response = await fetch(url, requestOptions)
             if (response.status != 200) {
-            console.log(response)
+            this.logger.info(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             throw new Error(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             }
             response = await response.json()
-            console.log(`${new Date()}: Responded succesfully.`)
+            this.logger.info(`${new Date()}: Responded succesfully.`)
             // this.monitoringService.incrementBhashiniSuccessCount()
             // if(task != 'asr') {
             //   await this.cacheManager.set(cacheKey, response, 7200);
@@ -219,7 +226,8 @@ export class AiService {
             return response
         } catch (error) {
             // this.monitoringService.incrementBhashiniFailureCount()
-            console.log(error);
+            Sentry.captureException("AI Service Error: Compute Error")
+            this.logger.error("AI Service Error: Compute Error",error);
             return {
             error
             }
@@ -258,7 +266,7 @@ export class AiService {
             }
           )
           if (response["error"]) {
-            console.log(response["error"])
+            this.logger.info(response["error"])
             throw new Error(response["error"])
           }
           return {
@@ -266,7 +274,8 @@ export class AiService {
             error: null
           }
         } catch (error) {
-          console.log(error)
+          Sentry.captureException("AI Service Error: Speech to Text Error")
+          this.logger.error("AI Service Error: Speech to Text Error",error)
           return {
             text: "",
             error: error
@@ -285,22 +294,25 @@ export class AiService {
             speechRecognizer.recognizeOnceAsync((result) => {
             switch (result.reason) {
                 case sdk.ResultReason.RecognizedSpeech:
-                console.log(`RECOGNIZED: Text=${result.text}`);
+                this.logger.info(`RECOGNIZED: Text=${result.text}`);
                 resolve(result.text);
                 break;
                 case sdk.ResultReason.NoMatch:
-                console.log('NOMATCH: Speech could not be recognized.');
+                Sentry.captureException('NOMATCH: Speech could not be recognized.')
+                this.logger.info('NOMATCH: Speech could not be recognized.');
                 reject(new Error('Speech could not be recognized'));
                 break;
                 case sdk.ResultReason.Canceled:
                 const cancellation = sdk.CancellationDetails.fromResult(result);
-                console.log(`CANCELED: Reason=${cancellation.reason}`);
+                Sentry.captureException(`CANCELED: Reason=${cancellation.reason}`)
+                this.logger.info(`CANCELED: Reason=${cancellation.reason}`);
                 reject(new Error('Recognition canceled'));
 
                 if (cancellation.reason === sdk.CancellationReason.Error) {
-                    console.log(`CANCELED: ErrorCode=${cancellation.ErrorCode}`);
-                    console.log(`CANCELED: ErrorDetails=${cancellation.errorDetails}`);
-                    console.log(
+                    Sentry.captureException(`CANCELED: ErrorCode=${cancellation.ErrorCode}, ErrorDetails=${cancellation.errorDetails}, Did you set the speech resource key and region values?`)
+                    this.logger.info(`CANCELED: ErrorCode=${cancellation.ErrorCode}`);
+                    this.logger.info(`CANCELED: ErrorDetails=${cancellation.errorDetails}`);
+                    this.logger.info(
                     'CANCELED: Did you set the speech resource key and region values?',
                     );
                 }
@@ -415,10 +427,11 @@ export class AiService {
       try {
         // await exec(command);
         await this.convertCodecAsync(inputFilePath,outputFileName);
-        console.log(`File '${inputFilePath}' converted to '${outputFileName}' successfully.`);
+        this.logger.info(`File '${inputFilePath}' converted to '${outputFileName}' successfully.`);
       } catch (error) {
         filePath = inputFilePath
-        console.log(error)
+        Sentry.captureException("AI Service Error: ASR Conversion Error")
+        this.logger.error("AI Service Error: ASR Conversion Error",error)
       }
   
       try {
@@ -449,7 +462,8 @@ export class AiService {
           await this.minioStorageService.uploadWavFile("amakrushi-audio", file.filename, fileBuffer);
           downloadURL = await this.minioStorageService.getDownloadURL("amakrushi-audio", file.filename)
         } catch (err) {
-          console.log(err)
+          Sentry.captureException("AI Service Error: Audio File Upload Error")
+          this.logger.error("AI Service Error: Audio File Upload Error",err)
           error = err
           downloadURL = "Error occured while uploading this audio."
         }
@@ -469,14 +483,16 @@ export class AiService {
           await unlink(filePath)
           await unlink(inputFilePath)
         } catch (error) {
-          console.log(error)
+          Sentry.captureException("AI Service Error: File Deletion Error")
+          this.logger.error("AI Service Error: File Deletion Error",error)
         }
         return {
           id: asr.id,
           text: asr.text
         }
       } catch (err) {
-        console.log('error', err)
+        Sentry.captureException("AI Service Error: ASR Error")
+        this.logger.error('AI Service Error: ASR Error', err)
         await this.prismaService.speech_to_text.create({
           data: {
             audio: downloadURL ? downloadURL : "Error occured while uploading this audio.",
@@ -496,9 +512,11 @@ export class AiService {
           text = text.replace('|', '')
           let finalResponse;
           let languageDetected = await this.detectLanguage(text)
-          console.log(languageDetected)
+          this.logger.info(languageDetected)
           if(languageDetected.language == "unk") {
-            throw new Error("This language is not supported!");
+            Sentry.captureException(`The language ${languageDetected.language} is not supported!`)
+            this.logger.info(`The language ${languageDetected.language} is not supported!`)
+            throw new Error(`The language ${languageDetected.language} is not supported!`);
           }  else {
             languageDetected = languageDetected.language;
           }
@@ -541,14 +559,13 @@ export class AiService {
               },
               timeout: 40000
             };
-            console.log(this.configService.get("ULCA_CONFIG_URL"))
+            this.logger.info(this.configService.get("ULCA_CONFIG_URL"))
             let response: any = await fetch(this.configService.get("ULCA_CONFIG_URL"), requestOptions)
             if (response.status != 200) {
-              console.log(response)
+              this.logger.info(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
               throw new Error(`${new Date()}: API call to '${this.configService.get("ULCA_CONFIG_URL")}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
             }
             response = await response.json()
-            console.log(response);
             await this.cacheManager.set(cacheKey, response, 86400);
             configResponse = response
           }
@@ -596,16 +613,14 @@ export class AiService {
                 },
                 timeout: 40000
               };
-              console.log(url)
               let response: any = await fetch(url, requestOptions)
-              console.log("Hereeee ", response)
               if (response.status != 200) {
-                console.log(response)
+                this.logger.info(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
                 throw new Error(`${new Date()}: API call to '${url}' with config '${JSON.stringify(raw, null, 3)}' failed with status code ${response.status}`)
               }
               response = await response.json();
               if (response["error"]) {
-                console.log(response["error"])
+                this.logger.info(response["error"])
                 throw new Error(response["error"])
               }
               await this.cacheManager.set(cacheKey, response, 7200);
@@ -616,19 +631,25 @@ export class AiService {
               console.log("Final Response: ", finalResponse)
             }
           } else {
+            Sentry.captureException("Something went wrong, please try again")
+            this.logger.info("Something went wrong, please try again")
             throw new Error('Something went wrong, please try again')
           }
           if (finalResponse && finalResponse.text) {
             const binaryData = Buffer.from(finalResponse.text, 'base64');
             const uuid = uuidv4();
             await this.minioStorageService.uploadWavFile("amakrushi-audio", `${uuid}.wav`, binaryData);
-            console.log("Uploaded the audio file...")
+            this.logger.info("Uploaded the audio file...")
             return await this.minioStorageService.getDownloadURL("amakrushi-audio", `${uuid}.wav`)
           } else {
+            Sentry.captureException("Something went wrong, please try again")
+            this.logger.info('Something went wrong, please try again')
             throw new Error('Something went wrong, please try again')
           }
         } catch (error) {
-          console.log(error);
+          Sentry.captureException("AI Service Error:Text to Speech Error")
+          //this.logger.error("AI Service Error:Text to Speech Error",error);
+          console.log("AI Service Error:Text to Speech Error",error)
           return {
             error
           }
@@ -717,7 +738,7 @@ export class AiService {
               }
             )
             if (response["error"]) {
-              console.log(response["error"])
+              this.logger.info(response["error"])
               throw new Error(response["error"])
             }
             textArray[i] = response?.pipelineResponse[0]?.output[0]?.target
@@ -727,7 +748,8 @@ export class AiService {
             error: null
           }
         } catch (error) {
-          console.log(error)
+          Sentry.captureException("AI Service Error: Translation Error")
+          this.logger.error("AI Service Error: Translation Error",error)
           return {
             translated: "",
             error: error

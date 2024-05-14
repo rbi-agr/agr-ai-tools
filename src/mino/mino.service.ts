@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from "@nestjs/config";
+import * as Sentry from '@sentry/node'
+import {LoggerService} from "../logger/logger.service"
 var Minio = require('minio')
 
 @Injectable()
 export class MinioStorageService {
   private minioClient;
+  private readonly logger: LoggerService
 
   constructor(
     private configService: ConfigService
@@ -18,7 +21,8 @@ export class MinioStorageService {
             secretKey: this.configService.get("MINO_SECRET_KEY")
           });
     } catch(error){
-        console.log(error)
+        Sentry.captureException("Audio Storage Service Initialization Error")
+        this.logger.error("Audio Storage Service Initialization Error",error)
     }
   }
 
