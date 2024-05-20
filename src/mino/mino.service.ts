@@ -113,37 +113,30 @@ export class MinioStorageService {
   }
 
   // async getDownloadURL(bucketName: string, filename: string) {
-  //   const url = this.configService.get("MINO_BASE_URL");
-  //   const accessKey = this.configService.get("MINO_ACCESS_KEY")
-  //   const secretKey = this.configService.get("MINO_SECRET_KEY")
-    
-  //   const scriptPath = 'src/ai/scripts/minio.sh';
-  //   const command =`${scriptPath} "${url}" "${accessKey}" "${secretKey}" "${bucketName}" "${filename}"`;
-  //   console.log("kjdsafk", command)
-  //   // return `${url}/${bucketName}/${filename}`;
+  //   const MINIO_BASE_URL = this.configService.get("MINO_BASE_URL");
+  //   return `${MINIO_BASE_URL}/${bucketName}/${filename}`;
   // }
 
   async getDownloadURL(bucketName: string, filename: string): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const url = this.configService.get("MINO_BASE_URL");
-      const accessKey = this.configService.get("MINO_ACCESS_KEY")
-      const secretKey = this.configService.get("MINO_SECRET_KEY")
-      const scriptPath = 'src/ai/scripts/minio.sh';
-      const command = `${scriptPath} "${url}" "${accessKey}" "${secretKey}" "${bucketName}" "${filename}"`;
+      return new Promise<string>((resolve, reject) => {
+        const url = this.configService.get("MINO_BASE_URL");
+        const accessKey = this.configService.get("MINO_ACCESS_KEY")
+        const secretKey = this.configService.get("MINO_SECRET_KEY")
+        const scriptPath = 'src/ai/scripts/minio.sh';
+        const command = `${scriptPath} "${url}" "${accessKey}" "${secretKey}" "${bucketName}" "${filename}"`;
 
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          console.error('Error executing shell script:', error);
-          reject(error);
-        } else if (stderr) {
-          console.error('Error in shell script:', stderr);
-          reject(stderr);
-        } else {
-          // Successfully executed shell script, capture the URL from stdout
-          const url = stdout.trim();
-          resolve(url);
-        }
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Error executing shell script:', error);
+            reject(error);
+          } else if (stderr) {
+            console.error('Error in shell script:', stderr);
+            reject(stderr);
+          } else {
+            const url = stdout.trim();
+            resolve(url);
+          }
+        });
       });
-    });
-  }
+    }
 }
