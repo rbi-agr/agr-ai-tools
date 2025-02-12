@@ -15,4 +15,5 @@ RUN yarn build
 RUN yarn prisma generate
 
 # Command to run the application
-CMD ["yarn", "run", "start:migrate:prod"]
+# CMD ["yarn", "run", "start:migrate:prod"]
+CMD ["tail", "-f", "/dev/null"]
