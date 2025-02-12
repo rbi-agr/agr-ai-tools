@@ -2,11 +2,11 @@ FROM node:18-bullseye
 
 WORKDIR /app
 
-RUN apk --no-cache --no-check-certificate add curl
+RUN apt-get update && apt-get install -y curl
 
 COPY package.json yarn.lock ./
 
-RUN yarn
+RUN yarn install
 
 COPY . .
 
@@ -14,6 +14,4 @@ RUN yarn build
 
 RUN yarn prisma generate
 
-# Command to run the application
 CMD ["yarn", "run", "start:migrate:prod"]
-# CMD ["tail", "-f", "/dev/null"]
